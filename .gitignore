@@ -1,0 +1,55 @@
+# ---------------------------------------------------------------------------
+# This repository tracks SOURCE CODE ONLY.
+# Every dataset, model checkpoint, build artifact and screenshot is
+# reproducible from the code, so none of it is committed.
+# See "Repository contents" in README.md.
+# ---------------------------------------------------------------------------
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Generated outputs (rebuilt by the pipeline)
+outputs/
+cache/
+
+# Satellite datasets (fetch with scripts/download_dataset.py)
+data/images/
+data/masks/
+data/patches/
+data/test_region/
+
+# Third-party dataset copies (DeepGlobe archives, etc.)
+archive/
+
+# Model checkpoints and tensors
+*.pth
+*.pt
+*.onnx
+
+# Basemap tile cache (re-fetch with scripts/fetch_basemap.py)
+outputs/basemap/tiles/
+
+# Screenshots (regenerate with the build_web_dashboard pipeline)
+shots/
+
+# Packaged code archives
+road_resilience_code.zip
+*.zip
+
+# Logs
+*.log
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

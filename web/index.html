@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RoadNet Ops — Emergency Network Console</title>
+<style>
+/* ==========================================================================
+   RoadNet Ops -- 7-page emergency operations console
+   Dark EOC theme shared by every page.
+   ========================================================================== */
+:root{
+  --bg:#080d18; --bg2:#0b1120; --panel:#101a2e; --panel2:#0d1526; --panel3:#16223c;
+  --line:#1e2b48; --line2:#27375a;
+  --txt:#e8eefc; --ink:#dbe6fb; --mut:#8fa0c0; --dim:#64748f;
+  --accent:#4cc2ff; --accent2:#3b82f6;
+  --ok:#39d98a; --warn:#ffc857; --bad:#ff9f43; --crit:#ff4757;
+  --rail:60px;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--txt);
+     font:14px/1.55 "Segoe UI",system-ui,-apple-system,Roboto,sans-serif;
+     -webkit-font-smoothing:antialiased}
+
+/* ---------- top bar ---------- */
+.topbar{display:flex;align-items:center;gap:18px;padding:12px 20px;
+        background:linear-gradient(90deg,#0f1b33,#080d18);
+        border-bottom:1px solid var(--line);position:sticky;top:0;z-index:40}
+.brand{display:flex;align-items:center;gap:11px}
+.brand .logo{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;
+  background:linear-gradient(135deg,var(--accent),#2563eb);color:#04101f;font-weight:800}
+.brand h1{font-size:17px;margin:0;letter-spacing:.2px;white-space:nowrap}
+.brand h1 span{color:var(--accent)}
+.brand .tag{font-size:11.5px;color:var(--dim);white-space:nowrap}
+.topbar .spacer{flex:1}
+.tstate{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--mut)}
+.pill{padding:5px 11px;border-radius:999px;font-size:11.5px;border:1px solid var(--line);
+      background:var(--panel2);color:var(--mut);white-space:nowrap}
+.pill.live{color:var(--ok);border-color:#1c4a36;background:#0b2119}
+.pill.warn{color:var(--warn);border-color:#4a3c14;background:#221c0c}
+.pill .dot{display:inline-block;width:7px;height:7px;border-radius:50%;
+           background:var(--ok);margin-right:6px;animation:pulse 1.7s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+select.sel{background:var(--panel2);border:1px solid var(--line);color:var(--txt);
+  border-radius:8px;padding:6px 9px;font:inherit;font-size:12.5px;cursor:pointer}
+
+/* ---------- page nav ---------- */
+.nav{display:flex;gap:2px;padding:0 14px;background:#0a1120;border-bottom:1px solid var(--line);
+     position:sticky;top:59px;z-index:35;overflow-x:auto}
+.nav button{display:flex;align-items:center;gap:9px;padding:11px 15px;background:none;
+  border:none;border-bottom:2px solid transparent;color:var(--mut);cursor:pointer;
+  font:inherit;font-size:13px;white-space:nowrap;transition:.14s}
+.nav button:hover{color:var(--txt);background:#0f1a30}
+.nav button.on{color:var(--txt);border-bottom-color:var(--accent);background:#101c33}
+.nav .num{font-size:10.5px;font-weight:700;color:var(--accent);background:#12233d;
+  border:1px solid var(--line2);border-radius:5px;padding:1px 5px;letter-spacing:.5px}
+.nav button.on .num{background:var(--accent);color:#04101f;border-color:var(--accent)}
+
+/* ---------- layout ---------- */
+main{padding:16px;max-width:2100px;margin:0 auto}
+.page{display:none}
+.page.on{display:block}
+.grid{display:grid;gap:14px;align-items:start}
+.g-ov{grid-template-columns:330px minmax(0,1fr) 360px}
+.g-2{grid-template-columns:minmax(0,1fr) 380px}
+.g-2b{grid-template-columns:340px minmax(0,1fr)}
+.g-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.g-4{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media(max-width:1400px){.g-ov{grid-template-columns:1fr}.g-2,.g-2b{grid-template-columns:1fr}}
+@media(max-width:1100px){.g-3,.g-4{grid-template-columns:1fr}}
+
+/* ---------- cards ---------- */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;
+      margin-bottom:14px}
+.card:last-child{margin-bottom:0}
+.card>h3{margin:0 0 4px;font-size:12.5px;letter-spacing:1.1px;color:var(--txt);
+  text-transform:uppercase;display:flex;align-items:center;gap:8px}
+.card>h3 .ic{color:var(--accent)}
+.card>.sub{color:var(--mut);font-size:12px;margin:0 0 12px}
+h2.pagetitle{margin:0 0 3px;font-size:19px;letter-spacing:.2px}
+p.lead{margin:0 0 16px;color:var(--mut);font-size:13px;max-width:1100px}
+.note{font-size:11.5px;color:var(--mut);line-height:1.6;margin-top:9px}
+.note b{color:var(--ink)}
+.warnbox{border:1px solid #4a3c14;background:#1d1809;border-radius:10px;padding:10px 12px;
+  font-size:12px;color:#f0d79a;margin-bottom:12px}
+.warnbox b{color:#ffd977}
+
+  /* ---------- scenario picker ---------- */
+  .scn{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px}
+  .scn button{display:flex;flex-direction:column;align-items:center;gap:5px;text-align:center;
+    background:var(--panel2);border:1px solid var(--line);color:var(--txt);
+    padding:11px 8px;border-radius:11px;cursor:pointer;font:inherit;transition:.15s}
+  .scn button:hover{border-color:var(--accent);background:#152140}
+  .scn button.on{border-color:var(--accent);background:#152140;box-shadow:0 0 0 1px var(--accent) inset}
+  .scn .ic{font-size:19px;line-height:1}
+  .scn b{font-size:12.5px;font-weight:600}
+  .scn small{color:var(--mut);font-size:10.5px}
+  .scn.wide{grid-template-columns:1fr}
+  .ctl{margin-bottom:12px}
+  .ctl label{display:flex;justify-content:space-between;gap:8px;font-size:12px;
+    color:var(--mut);margin-bottom:5px}
+  .ctl label b{color:var(--txt);font-variant-numeric:tabular-nums}
+  input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer}
+  .row{display:flex;gap:8px;flex-wrap:wrap}
+  .btn{padding:9px 12px;border-radius:9px;border:1px solid var(--line);
+       background:#182444;color:var(--txt);cursor:pointer;font:inherit;font-weight:600;
+       font-size:12.5px}
+  .btn:hover{border-color:var(--accent);background:#1c2b52}
+  .btn.ghost{background:var(--panel2);font-weight:500}
+  .btn.on{background:var(--accent);border-color:var(--accent);color:#04101f}
+  .btn.sm{padding:6px 10px;font-size:11.5px}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+
+  /* ---------- map ---------- */
+  /* All five maps use UNIQUE wrapper ids (mapOv, mapSim, ...) so each canvas can
+   * have its own view transform, so the shared style must key off a class. */
+  .mapwrap{position:relative;background:#080d1a;border:1px solid var(--line);
+           border-radius:12px;overflow:hidden}
+  canvas{display:block;width:100%;cursor:grab}
+  canvas.h360{height:360px} canvas.h440{height:440px}
+  canvas.h520{height:520px} canvas.h620{height:620px}
+  canvas.drag{cursor:grabbing}
+  .mapbar{position:absolute;left:10px;top:10px;display:flex;gap:6px;flex-wrap:wrap;z-index:3}
+  .mapbar span,.maptag{background:rgba(8,13,24,.86);border:1px solid var(--line);
+    padding:4px 9px;border-radius:7px;font-size:11px;color:var(--ink)}
+  .mapctl{position:absolute;right:10px;top:10px;display:flex;flex-direction:column;gap:5px;z-index:3;
+          align-items:flex-end}
+  .mapctl button{width:30px;height:30px;border-radius:8px;border:1px solid var(--line);
+    background:rgba(8,13,24,.9);color:var(--txt);cursor:pointer;font-size:15px;line-height:1}
+  .mapctl button:hover{border-color:var(--accent)}
+  .mapctl button.bm{width:auto;min-width:30px;padding:0 9px;font-size:11px;
+                   font-weight:600;letter-spacing:.3px}
+  .mapctl button.bm.on{background:var(--accent);border-color:var(--accent);color:#04101f}
+  .legend{position:absolute;right:10px;bottom:10px;background:rgba(8,13,24,.92);
+    border:1px solid var(--line);border-radius:9px;padding:9px 11px;font-size:11px;
+    color:var(--mut);z-index:3;max-width:230px}
+  .legend b{color:var(--ink);display:block;margin-bottom:5px;font-size:11px;
+    text-transform:uppercase;letter-spacing:.7px}
+  .grad{width:130px;height:8px;border-radius:4px;
+    background:linear-gradient(90deg,#39d98a,#ffc857,#ff4757);margin:4px 0}
+  .legend .li{display:flex;align-items:center;gap:7px;margin-top:3px}
+  .dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+  .dash{width:16px;height:0;border-top:2px dashed;flex:0 0 auto}
+
+
+/* ---------- KPI tiles ---------- */
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.kpis.k4{grid-template-columns:repeat(4,1fr)}
+@media(max-width:900px){.kpis.k4{grid-template-columns:1fr 1fr}}
+.kpi{background:var(--panel2);border:1px solid var(--line);border-radius:11px;padding:10px 11px}
+.kpi .v{font-size:21px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.15}
+.kpi .l{font-size:10px;color:var(--mut);text-transform:uppercase;letter-spacing:.7px;margin-top:2px}
+.kpi .d{font-size:11px;margin-top:3px;font-variant-numeric:tabular-nums}
+.kpi.ok .v{color:var(--ok)} .kpi.warn .v{color:var(--warn)}
+.kpi.bad .v{color:var(--bad)} .kpi.crit .v{color:var(--crit)}
+.kpi.acc .v{color:var(--accent)}
+
+/* ---------- tables ---------- */
+.tblwrap{overflow:auto;max-height:460px;border:1px solid var(--line);border-radius:10px}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{color:var(--mut);font-size:10.5px;text-transform:uppercase;letter-spacing:.7px;
+   background:#0c1424;position:sticky;top:0;z-index:1}
+tr:last-child td{border-bottom:none}
+tbody tr:hover{background:#101c33}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+td.wrap{white-space:normal;min-width:180px}
+.wrapcell{display:block;white-space:normal;overflow-wrap:anywhere;line-height:1.35}
+.hi{color:var(--ok);font-weight:700} .lo{color:var(--crit);font-weight:700}
+.mid{color:var(--warn);font-weight:700} .dim{color:var(--dim)}
+
+/* ---------- chips / badges ---------- */
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-size:11.5px;padding:5px 11px;border:1px solid var(--line);border-radius:999px;
+  cursor:pointer;color:var(--mut);background:var(--panel2);user-select:none;white-space:nowrap}
+.chip:hover{border-color:var(--accent);color:var(--ink)}
+.chip.on{background:var(--accent);border-color:var(--accent);color:#04101f;font-weight:700}
+.tag{font-size:9.5px;background:var(--accent);color:#04101f;padding:1px 6px;border-radius:4px;
+  letter-spacing:.5px;font-weight:700}
+.sev{display:inline-block;padding:4px 12px;border-radius:7px;font-weight:800;font-size:12.5px}
+.sev.green{background:#0e3a26;color:#5ff0aa} .sev.amber{background:#3d2f0a;color:#ffd977}
+.sev.orange{background:#40230a;color:#ffab5c} .sev.red{background:#3d0f14;color:#ff8080}
+.st{font-size:10.5px;padding:2px 8px;border-radius:999px;font-weight:700;white-space:nowrap}
+.st.ok{background:#0e3a26;color:#5ff0aa} .st.warn{background:#3d2f0a;color:#ffd977}
+.st.bad{background:#3d0f14;color:#ff8080} .st.dead{background:#40230a;color:#ffab5c}
+.st.mute{background:#182238;color:#8fa0c0}
+.ok{color:var(--ok)} .bad{color:var(--bad)} .warn{color:var(--warn)}
+
+/* ---------- assistant ---------- */
+.brief{font-size:12.5px;line-height:1.7}
+.brief h4{margin:11px 0 4px;font-size:11px;letter-spacing:1px;text-transform:uppercase;
+  color:var(--accent)}
+.brief h4:first-child{margin-top:0}
+.brief ul{margin:0;padding-left:17px} .brief li{margin:3px 0}
+.askrow{display:flex;gap:7px}
+.askrow input{flex:1;padding:9px 11px;border-radius:9px;background:var(--panel2);
+  border:1px solid var(--line);color:var(--txt);font:inherit;font-size:12.5px}
+.askrow input:focus{outline:none;border-color:var(--accent)}
+
+/* ---------- facilities / watch ---------- */
+.fac{display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:9px;
+  background:var(--panel2);border:1px solid var(--line);margin-bottom:5px;font-size:12.5px}
+.fac .ic{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;flex:0 0 auto;
+  background:#16223c;font-size:13px}
+.fac .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fac .dt{font-size:11px;color:var(--mut);text-align:right;white-space:nowrap}
+.wrow{display:grid;grid-template-columns:1fr 84px 44px 118px;gap:8px;align-items:center;
+  padding:7px 5px;border-bottom:1px solid var(--line);cursor:pointer;font-size:12px}
+.wrow:hover{background:#0f1830}
+.wrow.here{background:#12203c;box-shadow:inset 2px 0 0 var(--accent)}
+.wrow .wn{color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wrow .wbar{height:7px;background:#0b1020;border-radius:4px;overflow:hidden}
+.wrow .wbar i{display:block;height:100%}
+.wrow .wv{text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
+.wrow .ws{color:var(--mut);font-size:10.5px;text-align:right;white-space:nowrap}
+
+/* ---------- pipeline ---------- */
+.pipe{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
+.stage{background:var(--panel2);border:1px solid var(--line);border-radius:12px;overflow:hidden;
+  display:flex;flex-direction:column}
+.stage .ph{padding:9px 12px;font-size:12px;font-weight:700;border-bottom:1px solid var(--line);
+  display:flex;gap:8px;align-items:center}
+.stage .num{width:20px;height:20px;border-radius:6px;background:#152140;border:1px solid var(--line2);
+  display:grid;place-items:center;font-size:11px;color:var(--accent);flex:0 0 auto}
+.stage img{width:100%;display:block;background:#070c18;aspect-ratio:1/1;object-fit:contain;
+  image-rendering:pixelated}
+.stage .pc{padding:9px 12px;font-size:11.5px;color:var(--mut);line-height:1.55;margin-top:auto}
+
+/* ---------- tabs ---------- */
+.tabs{display:flex;gap:5px;margin:0 0 12px;flex-wrap:wrap}
+.tab{padding:7px 13px;border-radius:9px;border:1px solid var(--line);background:var(--panel2);
+  color:var(--mut);cursor:pointer;font:inherit;font-size:12.5px}
+.tab.on{color:var(--txt);border-color:var(--accent);background:#152140}
+.hidden{display:none}
+
+/* ---------- charts / bars ---------- */
+.bars{display:flex;align-items:flex-end;gap:3px;height:120px;padding-top:8px}
+.bars .b{flex:1;background:linear-gradient(180deg,var(--accent),#1d4ed8);border-radius:3px 3px 0 0;
+  min-height:2px;position:relative}
+.bars .b.warn{background:linear-gradient(180deg,var(--warn),#b45309)}
+.bars .b.crit{background:linear-gradient(180deg,var(--crit),#991b1b)}
+.spark{width:100%;height:150px;display:block;background:#070c18;border:1px solid var(--line);
+  border-radius:10px}
+#loc{width:100%;height:170px;display:block;background:#070c18;border:1px solid var(--line);
+  border-radius:10px;cursor:pointer}
+.legendrow{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--mut);margin-top:7px}
+.legendrow i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;
+  vertical-align:-1px}
+
+/* ---------- timeline / recovery ---------- */
+.tl{position:relative;height:8px;background:#0b1020;border-radius:5px;margin:10px 0 4px;
+  border:1px solid var(--line);overflow:hidden}
+.tl i{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,var(--crit),var(--warn),var(--ok))}
+.ticks{display:flex;justify-content:space-between;font-size:10.5px;color:var(--dim)}
+.team{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;
+  background:var(--panel2);border:1px solid var(--line);margin-bottom:6px;font-size:12.5px}
+.team .tn{width:26px;height:26px;border-radius:7px;background:#16223c;display:grid;place-items:center;
+  font-size:11px;font-weight:800;color:var(--accent);flex:0 0 auto}
+.team .tm{flex:1;min-width:0}
+.team .tm b{display:block;font-size:12.5px}
+.team .tm small{color:var(--mut);font-size:11px}
+.meter{height:8px;background:#0b1020;border-radius:4px;overflow:hidden;border:1px solid var(--line)}
+.meter i{display:block;height:100%;background:linear-gradient(90deg,var(--ok),var(--accent))}
+.prio{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:10px;
+  background:var(--panel2);border:1px solid var(--line);margin-bottom:6px;font-size:12.5px;
+  cursor:pointer}
+.prio:hover{border-color:var(--accent)}
+.prio .rn{width:24px;height:24px;border-radius:6px;background:#16223c;display:grid;place-items:center;
+  font-size:11px;font-weight:800;flex:0 0 auto}
+.prio .pn{flex:1;min-width:0}
+.prio .pn b{display:block}
+.prio .pn small{color:var(--mut);font-size:11px}
+
+/* ---------- misc ---------- */
+.pipestep{position:relative;cursor:pointer;border:2px solid transparent;border-radius:10px;
+  overflow:hidden;background:#0b1020}
+.pipestep img{display:block;width:100%;height:auto}
+.pipestep span{position:absolute;left:0;right:0;bottom:0;padding:4px 6px;font-size:10.5px;
+  color:#dbe6fb;background:linear-gradient(0deg,rgba(4,10,20,.95),rgba(4,10,20,0))}
+.pipestep:hover{border-color:var(--accent)}
+.pipestep.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.barstack{display:flex;flex-direction:column;gap:5px;padding-top:4px}
+.barrow{display:flex;align-items:center;gap:9px;margin-bottom:5px}
+.barlab{width:26px;color:var(--dim);font-size:11px;font-variant-numeric:tabular-nums;flex:0 0 auto}
+.bar{flex:1;height:9px;background:#0b1020;border:1px solid var(--line);border-radius:5px;overflow:hidden}
+.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--accent2),var(--accent))}
+.barval{width:52px;text-align:right;font-size:11.5px;color:var(--mut);
+  font-variant-numeric:tabular-nums;flex:0 0 auto}
+.kl{display:block;color:var(--mut);font-size:11px;letter-spacing:.4px;text-transform:uppercase}
+.scroll{max-height:230px;overflow:auto}
+.rowclick{cursor:pointer}
+.rowclick:hover td{background:#152140}
+.rowclick.on td{background:#152140;box-shadow:inset 2px 0 0 var(--accent)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:12.5px}
+.kv dt{color:var(--mut)} .kv dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:800px){.split{grid-template-columns:1fr}}
+footer{padding:12px 20px;color:var(--dim);font-size:11.5px;display:flex;gap:16px;
+  flex-wrap:wrap;border-top:1px solid var(--line);margin-top:10px}
+footer .sp{flex:1}
+.srcline{font-size:11px;color:var(--dim);margin-top:6px}
+
+.answer{margin-top:10px;background:var(--panel2);border:1px solid var(--line);
+  border-left:3px solid var(--accent);border-radius:9px;padding:10px 12px;font-size:12.5px;
+  line-height:1.65;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <div class="logo">R</div>
+    <h1>RoadNet <span>Ops</span></h1>
+    <div class="tag">AI-Powered Road Network Reconstruction &amp; Resilience Analysis</div>
+  </div>
+  <div class="spacer"></div>
+  <div class="tstate">
+    <span class="pill live"><span class="dot"></span><span id="pillMode">Offline Mode</span></span>
+    <select class="sel" id="areaSel" title="Monitored area"></select>
+    <span class="pill" id="pillNodes">— junctions</span>
+    <span class="pill" id="pillSev">—</span>
+  </div>
+</header>
+
+<nav class="nav" id="nav">
+  <button data-p="overview" class="on"><span class="num">01</span>Operations Overview</button>
+  <button data-p="simulation"><span class="num">02</span>Disaster Simulation</button>
+  <button data-p="reconstruction"><span class="num">03</span>Road Reconstruction</button>
+  <button data-p="analytics"><span class="num">04</span>Network Analytics</button>
+  <button data-p="facilities"><span class="num">05</span>Facility &amp; Route Impact</button>
+  <button data-p="recovery"><span class="num">06</span>Recovery Planning</button>
+  <button data-p="research"><span class="num">07</span>Model &amp; Research Results</button>
+</nav>
+
+<main>
+<!-- ============================ 01 OPERATIONS OVERVIEW ==================== -->
+<section class="page on" id="page-overview">
+  <h2 class="pagetitle">Operations Overview</h2>
+  <p class="lead">Live status of the selected town under the running scenario: what is still
+    connected, which facilities can be reached, which junctions now matter, and the assistant's
+    briefing. Everything on this page is driven by the same simulation used by pages 02-06.</p>
+  <div class="grid g-ov">
+    <div>
+      <div class="card">
+        <h3><span class="ic">&#9888;</span>Disaster Scenario</h3>
+        <p class="sub">Simulate different hazards and analyze impact.</p>
+        <div class="scn" id="scn"></div>
+        <div id="simCtls"></div>
+        <div class="row">
+          <button class="btn ghost sm" id="btnDrag">&#10022; Move Epicentre</button>
+          <button class="btn ghost sm" id="btnReset">&#8635; Reset</button>
+        </div>
+        <div class="note">Click <b>Move Epicentre</b>, then click the map to relocate the
+          hazard centre. The damaged roads move with it.</div>
+      </div>
+      <div class="card">
+        <h3><span class="ic">&#9635;</span>Network Status</h3>
+        <p class="sub">Current network health after the disaster.</p>
+        <div class="kpis" id="kpis"></div>
+        <div class="note" id="connNote"></div>
+        <div id="legendBox" style="margin-top:11px"></div>
+      </div>
+      <div class="card">
+        <h3><span class="ic">&#9673;</span>Monitored Areas</h3>
+        <p class="sub">All towns run the same scenario at the same real-world size.</p>
+        <div id="watch"></div>
+      </div>
+      <div class="card">
+        <h3><span class="ic">&#9678;</span>Regional Locator</h3>
+        <canvas id="loc"></canvas>
+        <div class="note">Positions only, coloured by live connectivity. This console never
+          invents streets between towns.</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card" style="padding:10px">
+        <div id="mapOv" class="mapwrap">
+          <div class="mapbar" id="mapbar"></div>
+          <div class="mapctl">
+            <button id="btnBM" class="bm" title="Toggle map basemap (dark / light)">M</button>
+            <button id="btnZin" title="Zoom in">+</button>
+            <button id="btnZout" title="Zoom out">&minus;</button>
+            <button id="btnFit2" title="Fit">&#10533;</button>
+          </div>
+          <canvas id="cv" class="h620"></canvas>
+          <div class="legend" id="legend"></div>
+        </div>
+        <div class="row" style="margin-top:9px">
+          <span class="pill">drag to pan &middot; scroll to zoom</span>
+          <span class="pill" id="mapScalePill">—</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="tabs">
+          <div class="tab on" data-tab="fac">Facilities</div>
+          <div class="tab" data-tab="crit">Critical Junctions</div>
+          <div class="tab" data-tab="pipe">How the roads are formed</div>
+          <div class="tab" data-tab="model">Model Results</div>
+        </div>
+        <div id="tab-fac"><div id="facList"></div></div>
+        <div id="tab-crit" class="hidden"><div id="critTable"></div></div>
+        <div id="tab-pipe" class="hidden"><div class="pipe" id="pipe"></div>
+          <div class="note" id="pipeNote"></div></div>
+        <div id="tab-model" class="hidden"><div id="modelTable"></div>
+          <div class="note" id="modelNote"></div></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <h3><span class="ic">&#128101;</span>Emergency Assistant</h3>
+        <p class="sub">AI-powered briefing &amp; Q&amp;A</p>
+        <div class="row" style="align-items:center;margin-bottom:10px">
+          <span class="sev green" id="sevBadge">—</span>
+          <span id="headline" style="font-size:12px;color:var(--mut)">—</span>
+        </div>
+        <div class="brief" id="brief">Select a scenario to generate a briefing.</div>
+      </div>
+      <div class="card">
+        <h3><span class="ic">&#9998;</span>Ask the Assistant</h3>
+        <div class="askrow">
+          <input id="ask" placeholder="e.g. Which junction matters most?">
+          <button class="btn" id="btnAsk">Ask</button>
+        </div>
+        <div class="answer" id="ans" style="display:none"></div>
+        <div class="chips" style="margin-top:10px" id="quickQ"></div>
+        <div class="note" id="llmNote"></div>
+      </div>
+      <div class="card">
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 02 DISASTER SIMULATION ==================== -->
+<section class="page" id="page-simulation">
+  <h2 class="pagetitle">Disaster Simulation</h2>
+  <p class="lead">Simulate earthquake, flood, landslide and road closures. Set the severity,
+    the affected radius and the time progression; the rest of the console (network, routes,
+    analytics, recovery) recalculates from whatever you set here.</p>
+  <div class="grid g-2b">
+    <div>
+      <div class="card">
+        <h3><span class="ic">&#9888;</span>Hazard Type</h3>
+        <div class="scn" id="scn2"></div>
+        <div class="note" id="scnBlurb"></div>
+      </div>
+      <div class="card">
+        <h3><span class="ic">&#9881;</span>Severity Parameters</h3>
+        <div id="simCtls2"></div>
+      </div>
+      <div class="card">
+        <h3><span class="ic">&#9203;</span>Time Progression</h3>
+        <p class="sub">Play the event forward to see damage spread.</p>
+        <div class="ctl">
+          <label>Elapsed <b id="vTime">T+0 min</b></label>
+          <input type="range" id="rTime" min="0" max="100" value="100">
+        </div>
+        <div class="row">
+          <button class="btn sm" id="btnPlay">&#9654; Play</button>
+          <button class="btn ghost sm" id="btnTimeReset">&#8635; T+0</button>
+        </div>
+        <div class="tl"><i id="tlFill" style="width:100%"></i></div>
+        <div class="ticks"><span>T+0</span><span>T+30</span><span>T+60</span>
+          <span>T+90</span><span>T+120 min</span></div>
+        <div class="note">Damage grows linearly to the configured radius: at 50% elapsed,
+          the hazard has reached half its final size. Nothing here is a forecast &mdash; it
+          is a stress test of the network.</div>
+      </div>
+    </div>
+    <div>
+      <div class="card" style="padding:10px">
+        <div id="mapSim" class="mapwrap">
+          <div class="mapbar" id="mapbar2"></div>
+          <div class="mapctl"><button class="bm" title="Toggle map basemap (dark / light)">M</button></div>
+          <canvas id="cv2" class="h520"></canvas>
+          <div class="legend" id="legend2"></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3><span class="ic">&#128200;</span>Live Impact Curve</h3>
+        <p class="sub">Junctions lost and connectivity as the event progresses.</p>
+        <canvas class="spark" id="simChart"></canvas>
+        <div class="legendrow">
+          <span><i style="background:#4cc2ff"></i>Connectivity %</span>
+          <span><i style="background:#ff4757"></i>Junctions lost</span>
+        </div>
+      </div>
+      <div class="card">
+        <h3><span class="ic">&#9635;</span>Scenario Comparison</h3>
+        <p class="sub">Every hazard applied to this town at the current severity.</p>
+        <div id="scnCompare"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 03 ROAD RECONSTRUCTION ================== -->
+<section class="page" id="page-reconstruction">
+  <h2 class="pagetitle">Road Reconstruction Pipeline</h2>
+  <p class="lead">The complete path from a satellite image to a healed road graph. Every
+    panel below is a real artefact produced by running that stage on real DeepGlobe data with
+    the trained checkpoints in <code>outputs/</code>.</p>
+  <div class="warnbox" id="deepglobeNote"></div>
+  <div class="card">
+    <h3><span class="ic">&#128165;</span>Satellite Image &rarr; Healed Road Graph</h3>
+    <p class="sub">Seven stages. The first six are imagery; the seventh is the graph every other
+      page analyses.</p>
+    <div class="pipe" id="pipe3"></div>
+  </div>
+  <div class="grid g-2">
+    <div class="card">
+      <h3><span class="ic">&#9881;</span>Stage Detail</h3>
+      <p class="sub">Select a stage to read what it does.</p>
+      <div id="pipeDetail"></div>
+    </div>
+    <div class="card">
+      <h3><span class="ic">&#9635;</span>What This Page Is (and Is Not)</h3>
+      <div class="note" id="scopeNote" style="font-size:12.5px"></div>
+    </div>
+  </div>
+  <div class="card">
+    <h3><span class="ic">&#9881;</span>Data Provenance</h3>
+    <div class="note" id="prov"></div>
+  </div>
+</section>
+<!-- ============================ 04 NETWORK ANALYTICS ==================== -->
+<section class="page" id="page-analytics">
+  <h2 class="pagetitle">Network Analytics</h2>
+  <p class="lead">Topological structure of the selected town: nodes, edges, centrality,
+    articulation points, bridges, connected components, and the vulnerability and resilience
+    metrics derived from them &mdash; recomputed live for the running scenario.</p>
+  <div class="warnbox" id="analyticNote"></div>
+  <div class="kpis k4" id="anKpis" style="margin-bottom:14px"></div>
+  <div class="grid g-2">
+    <div>
+      <div class="card" style="padding:10px">
+        <div class="tabs" id="anTabs">
+          <div class="tab on" data-view="criticality">Criticality</div>
+          <div class="tab" data-view="articulation">Articulation points</div>
+          <div class="tab" data-view="bridges">Bridges</div>
+          <div class="tab" data-view="components">Components</div>
+        </div>
+        <div id="mapAn" class="mapwrap">
+          <div class="mapbar" id="anBar"></div>
+          <div class="mapctl"><button class="bm" title="Toggle map basemap (dark / light)">M</button></div>
+          <canvas id="cvAn" class="h520"></canvas>
+          <div class="legend" id="anLegend"></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3><span class="ic">&#9635;</span>Centrality Distribution</h3>
+        <p class="sub">How concentrated the network's through-traffic is.</p>
+        <div class="barstack" id="cenBars"></div>
+        <div class="note" id="cenNote"></div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <h3><span class="ic">&#9888;</span>Vulnerability &amp; Resilience</h3>
+        <p class="sub">Before the event vs now.</p>
+        <div class="tblwrap" id="vulnTable"></div>
+        <div class="note" id="vulnNote"></div>
+      </div>
+      <div class="card">
+        <h3><span class="ic">&#9670;</span>Structural Weaknesses</h3>
+        <p class="sub">Single points of failure &mdash; losing any one of these splits the network.</p>
+        <div class="tblwrap" id="artTable"></div>
+      </div>
+      <div class="card">
+        <h3><span class="ic">&#9707;</span>Connected Components</h3>
+        <div class="tblwrap" id="compTable"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 05 FACILITY & ROUTE IMPACT ============== -->
+<section class="page" id="page-facilities">
+  <h2 class="pagetitle">Facility &amp; Route Impact</h2>
+  <p class="lead">Hospitals, shelters, police and fire stations: can they still be reached, and
+    what does a responder's route look like before and after the disaster?</p>
+  <div class="kpis k4" id="facKpis" style="margin-bottom:14px"></div>
+  <div class="grid g-2">
+    <div>
+      <div class="card" style="padding:10px">
+        <div class="tabs" id="facTabs">
+          <div class="tab on" data-fview="status">Accessibility</div>
+          <div class="tab" data-fview="route">Alternate routes</div>
+        </div>
+        <div id="mapFac" class="mapwrap">
+          <div class="mapbar" id="facBar"></div>
+          <div class="mapctl"><button class="bm" title="Toggle map basemap (dark / light)">M</button></div>
+          <canvas id="cvFac" class="h520"></canvas>
+          <div class="legend" id="facLegend"></div>
+        </div>
+      </div>
+      <div class="card" id="routePanel" style="display:none">
+        <h3><span class="ic">&#10142;</span>Before / After Routes</h3>
+        <div class="row" style="margin-bottom:10px">
+          <select class="sel" id="routeFrom"></select>
+          <span style="color:var(--mut);align-self:center">&rarr;</span>
+          <select class="sel" id="routeTo"></select>
+        </div>
+        <div id="routeOut"></div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <h3><span class="ic">&#127970;</span>Facilities &amp; Reachability</h3>
+        <p class="sub" id="facKindFilterWrap">Filter:
+          <span class="chips" id="facFilters" style="display:inline-flex"></span></p>
+        <div class="tblwrap" id="facTable"></div>
+        <div class="note" id="facNote"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 06 RECOVERY PLANNING ==================== -->
+<section class="page" id="page-recovery">
+  <h2 class="pagetitle">Recovery Planning</h2>
+  <p class="lead">Turn the damage into a work plan: rank the junctions to repair, allocate
+    crews, and watch connectivity climb back as roads are restored over time.</p>
+  <div class="kpis k4" id="recKpis" style="margin-bottom:14px"></div>
+  <div class="grid g-2">
+    <div>
+      <div class="card">
+        <h3><span class="ic">&#128188;</span>Repair Priorities</h3>
+        <p class="sub">Ranked by how much each junction unblocks. Click to send the next crew.</p>
+        <div class="row" style="margin-bottom:10px">
+          <span class="pill">Crews available</span>
+          <input type="range" id="rTeams" min="1" max="12" value="3" style="flex:1;min-width:130px">
+          <b id="vTeams" style="font-variant-numeric:tabular-nums">3</b>
+        </div>
+        <div class="row" style="margin-bottom:11px">
+          <button class="btn sm" id="btnAllocate">&#128203; Allocate crews</button>
+          <button class="btn ghost sm" id="btnAuto">&#9654; Auto-recover all</button>
+          <button class="btn ghost sm" id="btnResetRec">&#8635; Reset</button>
+        </div>
+        <div id="prioList"></div>
+      </div>
+      <div class="card">
+        <h3><span class="ic">&#128101;</span>Team Allocation</h3>
+        <div id="teamList"></div>
+      </div>
+    </div>
+    <div>
+      <div class="card" style="padding:10px">
+        <div id="mapRec" class="mapwrap">
+          <div class="mapbar" id="recBar"></div>
+          <div class="mapctl"><button class="bm" title="Toggle map basemap (dark / light)">M</button></div>
+          <canvas id="cvRec" class="h440"></canvas>
+          <div class="legend" id="recLegend"></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3><span class="ic">&#128200;</span>Recovery Over Time</h3>
+        <p class="sub">Connectivity recovered as crews finish their assignments.</p>
+        <canvas class="spark" id="recChart"></canvas>
+        <div class="row" style="margin-top:8px">
+          <button class="btn sm" id="btnRecPlay">&#9654; Play recovery</button>
+          <span class="pill" id="recClock">T+0 h</span>
+        </div>
+        <div class="note" id="recNote"></div>
+      </div>
+      <div class="card">
+        <h3><span class="ic">&#9989;</span>Recovery Log</h3>
+        <div class="tblwrap" id="recLog" style="max-height:240px"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 07 MODEL & RESEARCH ==================== -->
+<section class="page" id="page-research">
+  <h2 class="pagetitle">Model &amp; Research Results</h2>
+  <p class="lead">Segmentation quality, healing ablations and dataset statistics. Every figure
+    on this page was measured on the held-out real DeepGlobe test split using the checkpoints in
+    <code>outputs/</code> &mdash; nothing is a target value or an estimate.</p>
+  <div class="card">
+    <h3><span class="ic">&#9635;</span>Segmentation Performance</h3>
+    <p class="sub">Pixel-level metrics on the held-out test split, and under synthetic occlusion.</p>
+    <div class="tblwrap" id="resMetrics"></div>
+    <div class="note" id="resNote"></div>
+  </div>
+  <div class="grid g-2">
+    <div>
+      <div class="card">
+        <h3><span class="ic">&#8644;</span>Baseline vs Attention (Ablation)</h3>
+        <p class="sub">Part C: does attention help, and where?</p>
+        <div class="tblwrap" id="resAblation"></div>
+        <div class="note" id="resAblNote"></div>
+      </div>
+      <div class="card">
+        <h3><span class="ic">&#9203;</span>Inference &amp; Compute</h3>
+        <dl class="kv" id="resCompute"></dl>
+        <div class="note" id="resComputeNote"></div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <h3><span class="ic">&#128202;</span>Dataset Statistics</h3>
+        <dl class="kv" id="resDataset"></dl>
+        <div class="note" id="resDatasetNote"></div>
+      </div>
+      <div class="card">
+        <h3><span class="ic">&#9881;</span>Graph-Healing Ablation (Part D)</h3>
+        <p class="sub">Learned link prediction vs the classical distance+angle heal.</p>
+        <div class="tblwrap" id="resHeal"></div>
+        <div class="note" id="resHealNote"></div>
+      </div>
+      <div class="card">
+        <h3><span class="ic">&#9432;</span>Where DeepGlobe Actually Helps</h3>
+        <div class="note" id="deepScope" style="font-size:12.5px"></div>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <span>RoadNet Ops v2.0 &mdash; 7-page emergency operations console</span>
+  <span>Research project</span>
+  <span class="sp"></span>
+  <span id="footProv">Map data: OpenStreetMap</span>
+  <span id="footBasemap"></span>
+  <span class="pill live"><span class="dot"></span>All systems operational</span>
+</footer>
+<script id="payload" type="application/json">__PAYLOAD__</script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,377 @@
+================================================================================
+ROAD NETWORK RECONSTRUCTION & RESILIENCE - TRAINING COMMANDS
+Extraction Track (Parts A, B, C, D) - full training + graph generation
+================================================================================
+
+All commands are run from the project root:
+
+    cd c:\Users\anusu\Documents\road_resilience
+
+This machine is CPU-only (torch CPU build). Training times below are measured on
+this machine with 200 samples (140 train / 30 val / 30 test).
+
+  >> IF YOU ARE MOVING THIS PROJECT TO A GPU MACHINE, READ "GPU MIGRATION"
+     BELOW FIRST - there are a few things to change before you train there. <<
+
+
+================================================================================
+GPU MIGRATION  (do these things on the GPU machine)
+================================================================================
+
+The code needs NO changes: src/utils.py::get_device() already returns 'cuda'
+when a GPU is present, and set_seed() already calls torch.cuda.manual_seed_all().
+Only the environment and a few config values need to change.
+
+
+--------------------------------------------------------------------------------
+G1 - INSTALL A CUDA BUILD OF PYTORCH  (do this BEFORE requirements.txt)
+--------------------------------------------------------------------------------
+
+  pip install -r requirements.txt on its own installs the CPU build of torch.
+  Install the CUDA wheel first, then the rest:
+
+  pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+  pip install -r requirements.txt
+
+  Pick the index that matches the machine's CUDA version (cu118 / cu121 / cu124).
+  Check what the driver supports with:  nvidia-smi
+
+  If requirements.txt was already run first, force-replace the CPU build:
+
+  pip uninstall -y torch torchvision
+  pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+
+
+--------------------------------------------------------------------------------
+G2 - VERIFY THE GPU IS ACTUALLY USED  (before any long run)
+--------------------------------------------------------------------------------
+
+  python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+
+  Must print True. Then confirm the training log itself says so:
+
+  python main.py --stage extraction --epochs 1
+
+  Look for this line in the output:
+
+      [train] device = cuda
+
+  If it still says "device = cpu", the CPU wheel is still installed - go to G1.
+  (That log line is the check that matters; it is printed on every run.)
+
+
+--------------------------------------------------------------------------------
+G3 - RETUNE config.py FOR THE GPU
+--------------------------------------------------------------------------------
+
+  Edit these values in config.py:
+
+      BATCH_SIZE = 16            # was 8 (CPU-safe). 16-32 uses a modern GPU well
+      NUM_WORKERS = 4            # was 0. Data loading is the usual GPU bottleneck;
+                                  # on a "too many open files" error, drop to 2
+      EPOCHS = 20                # was 10. GPU runs are cheap - train longer
+      MAX_TRAIN_SAMPLES = 2000   # was 200. This is the biggest accuracy win
+      EPOCHS_ATTENTION = 20      # keep the Part C model in step with Part A
+      LEARNING_RATE = 1e-4       # unchanged; raise to 3e-4 only if IoU plateaus
+
+  Expected payoff: the CPU run took ~30 min for 10 epochs x 200 samples. A
+  mid-range GPU should do ~20 epochs x 2000 samples in similar wall time - about
+  10x the data for the same cost, which is where the accuracy gain is. The
+  reference CPU run scored IoU 0.335 / Dice 0.481 / Occlusion-Recall 0.322; the
+  gain on DeepGlobe comes mostly from more data, not more epochs.
+
+
+--------------------------------------------------------------------------------
+G4 - MOVE THE PROJECT AND THE DATASET ACROSS
+--------------------------------------------------------------------------------
+
+  Code (73 KB, portable - no absolute paths anywhere):
+
+      road_resilience_code.zip
+        -> unzip on the target machine, then: cd road_resilience
+
+  The dataset is NOT in the zip: 4.1 GB across 15,200 files. Transfer it
+  separately:
+
+      data/images/    (8,570 satellite images, *_sat.jpg)
+      data/masks/     (6,226 ground-truth masks, *_mask.png)
+
+  Copying 15,200 small files over a slow link is slow - zipping them first is
+  usually much faster:
+
+      zip -r dataset.zip data/images data/masks        # on the source machine
+      # transfer dataset.zip, then on the target machine:
+      unzip -q dataset.zip -d .
+
+  Or re-download on the target machine:
+
+      python scripts/download_dataset.py --dataset deepglobe
+
+  Skip outputs/ (203 MB of checkpoints) unless you want to skip Part A training
+  and only re-run Parts C/D - a fresh GPU retrain is usually faster anyway.
+
+
+--------------------------------------------------------------------------------
+G5 - OPTIONAL: BIT-EXACT REPRODUCIBILITY ON GPU
+--------------------------------------------------------------------------------
+
+  By default cudnn autotunes for speed, so reruns differ slightly. For bit-exact
+  runs, add these two lines to set_seed() in src/utils.py, right after the
+  torch.manual_seed(seed) call:
+
+      torch.backends.cudnn.deterministic = True
+      torch.backends.cudnn.benchmark = False
+
+  Leave them out for maximum training speed.
+
+
+--------------------------------------------------------------------------------
+G6 - THEN RUN THE NORMAL TRAINING COMMANDS (unchanged)
+--------------------------------------------------------------------------------
+
+      python main.py --stage extraction              # Part A  (now on GPU)
+      python scripts/run_part_c.py                   # Part C  (same split, GPU)
+      python scripts/run_part_b.py                   # Part B  -> graph contract
+      python scripts/run_part_d.py                   # Part D  (GNN, seconds)
+      python main.py --stage analysis --source teammate_export
+
+  For the written report: after retraining on the GPU with more data, the Part C
+  and Part D numbers in the steps below WILL differ from the reference CPU
+  numbers - that is expected. Re-record the two comparison tables (they print
+  automatically and are saved to outputs/partC_comparison.json and
+  outputs/partD_comparison.json). The Part C novelty check is evaluated against
+  whatever baseline was trained in the same session, so it stays internally
+  consistent as long as Parts A and C are retrained together.
+
+
+
+--------------------------------------------------------------------------------
+STEP 0 - INSTALL DEPENDENCIES  (once)
+--------------------------------------------------------------------------------
+
+  !! ON A GPU MACHINE, FOLLOW "G1" FIRST.  Running this line on its own installs
+  !! the CPU build of torch even when an NVIDIA GPU is present.
+
+pip install -r requirements.txt
+
+  Requires: torch, torchvision, segmentation-models-pytorch, albumentations,
+            opencv-python, scikit-image, networkx, torch-geometric,
+            numpy, matplotlib, osmnx, streamlit, streamlit-folium, folium
+
+  If torch-geometric alone is missing:  pip install torch-geometric
+
+  For a GPU: see G1 (install the CUDA wheel first) and G2 (confirm the training
+  log says "device = cuda" before starting a long run).
+
+
+--------------------------------------------------------------------------------
+STEP 1 - DATASET  (put your images/masks in place)
+--------------------------------------------------------------------------------
+
+  If you are on the GPU machine, see G4 for the fastest way to transfer it.
+  DeepGlobe layout:                 Massachusetts layout:
+    data/images/<id>_sat.jpg          data/images/<name>.png
+    data/masks/<id>_mask.png          data/masks/<name>.png
+
+  256x256 patches and the 70/15/15 split are built automatically and cached in
+  outputs/dataset_split.json. Optional helper for downloading a real dataset:
+
+  python scripts/download_dataset.py --dataset deepglobe
+  python scripts/download_dataset.py --dataset massachusetts
+
+  No dataset? The pipeline falls back to a built-in synthetic road dataset:
+    python main.py --stage extraction --use-synthetic
+
+
+--------------------------------------------------------------------------------
+STEP 2 - PART A: TRAIN THE BASELINE U-NET  (the reference model)
+--------------------------------------------------------------------------------
+
+  Full training (10 epochs, 200 samples) - about 30 minutes on CPU:
+
+  python main.py --stage extraction
+
+  This trains the U-Net + ResNet34 (BCE + Dice) with occlusion augmentation,
+  prints IoU / Dice / Occlusion-Recall, saves outputs/best_model.pth, and
+  exports outputs/masks/mask_tile_XXX.png + outputs/tiles_manifest.json.
+
+  Equivalent standalone driver (Part A only):
+
+  python scripts/run_part_a.py
+  python scripts/run_part_a.py --epochs 15            # more epochs
+  python scripts/run_part_a.py --samples 500          # more data (slower)
+  python scripts/run_part_a.py --eval-only            # metrics only
+  python scripts/run_part_a.py --export-only          # re-run inference only
+
+  Faster smoke test (a few minutes):
+
+  python main.py --stage extraction --samples 24 --epochs 2 --use-synthetic
+
+  Expected output:
+
+    ========== TEST RESULTS ==========
+    IoU: 0.34
+    Dice: 0.48
+    ================================
+    Occlusion-Recall: 0.32
+
+
+--------------------------------------------------------------------------------
+STEP 3 - PART C: TRAIN THE OCCLUSION-AWARE ATTENTION MODEL  (Novelty 1)
+--------------------------------------------------------------------------------
+
+  MUST be run AFTER Part A so the comparison table has baseline numbers.
+
+  python scripts/run_part_c.py
+
+  Trains on the SAME split as Part A (spatial self-attention bottleneck + SE
+  decoder + occlusion-conditioned loss), evaluates the same three metrics, then
+  prints the Part C comparison table and the novelty check.
+  About 30 minutes on CPU. Saves outputs/best_attention_model.pth.
+
+  Useful variants:
+
+  python scripts/run_part_c.py --epochs 4             # quicker run
+  python scripts/run_part_c.py --eval-only             # re-evaluate only
+  python scripts/run_part_c.py --export-masks          # also export attention masks
+
+  Expected output:
+
+    Model                                IoU    Dice  Occl-Rec
+    U-Net baseline (Part A)            0.335   0.481     0.322
+    Attention model (Part C)           0.425   0.578     0.426
+    Delta                             +0.090  +0.098    +0.105
+    NOVELTY CHECK ... SUPPORTED -- Occlusion-Recall +0.105 > IoU +0.090
+
+--------------------------------------------------------------------------------
+STEP 4 - PART B: BUILD THE GRAPH FROM THE MASKS  (classical healing)
+--------------------------------------------------------------------------------
+
+  python scripts/run_part_b.py
+
+  Stitch tiles -> skeletonize -> nodes/edges -> heal (distance + angle, MST via
+  Union-Find) -> write the shared contract. Takes seconds.
+  Prints the connectivity report and writes:
+      outputs/graph.graphml, outputs/nodes.json, outputs/edges.json
+
+  No masks yet? It generates a labelled demo tile set so the stage still runs.
+
+
+--------------------------------------------------------------------------------
+STEP 5 - PART D: TRAIN THE GNN LINK-PREDICTION HEALER  (Novelty 2)
+--------------------------------------------------------------------------------
+
+  python scripts/run_part_d.py
+
+  Trains a 2-layer GCN on synthetically occluded road graphs (OSM cache +
+  synthetic grids), then benchmarks classical vs learned healing and prints the
+  Part D table. Trains in well under a minute on CPU.
+
+  Useful variants:
+
+  python scripts/run_part_d.py --epochs 100            # longer training
+  python scripts/run_part_d.py --bench-graphs 20      # more held-out graphs
+  python scripts/run_part_d.py --no-train              # benchmark saved model
+
+  Expected output:
+
+    Method                                     Conn%  Bridges  False  Time(s)
+    Classical (Part B: MST + dist/angle)       123.8      7.8    7.2    0.004
+    Learned (Part D: GNN link pred.)           123.8      7.8    7.2    0.188
+    Conclusion: classical is as good and much faster -> kept as default.
+
+
+--------------------------------------------------------------------------------
+STEP 6 - BUILD THE GRAPH WITH THE LEARNED HEALER (optional, Part D)
+--------------------------------------------------------------------------------
+
+  Same graph pipeline, only the scoring function swapped:
+
+  python scripts/run_part_b.py --method gnn
+
+  (Requires Step 5 to have been run once so the GNN checkpoint exists.)
+
+
+--------------------------------------------------------------------------------
+STEP 7 - NETWORK ANALYSIS  (consumes the shared contract)
+--------------------------------------------------------------------------------
+
+  python main.py --stage analysis --source teammate_export
+
+  Centrality, top-N gatekeepers and node-failure ablation -> outputs/results.json
+  and outputs/plots/centrality_top10.png. Runs in seconds.
+
+  The analysis half also has a graph-source switch:
+
+  python main.py --stage analysis --source graphml
+  python main.py --stage analysis --source osm          # cached OSM demo graph
+
+
+--------------------------------------------------------------------------------
+STEP 8 - DASHBOARD
+--------------------------------------------------------------------------------
+
+  streamlit run dashboard/app.py
+
+
+--------------------------------------------------------------------------------
+ONE-LINERS - THE WHOLE THING
+--------------------------------------------------------------------------------
+
+  Full pipeline (demo mode: no training, uses the cached OSM graph):
+
+  python main.py --stage all
+
+  Full pipeline INCLUDING training (set DEMO_MODE = False in config.py first):
+
+  python main.py --stage all
+
+  Extraction track only, in order:
+
+  python main.py --stage extraction && python scripts/run_part_c.py && python scripts/run_part_b.py && python scripts/run_part_d.py && python main.py --stage analysis --source teammate_export
+
+  The same, model choice = attention (mix and match the novelties):
+
+  python scripts/run_part_c.py --export-masks && python scripts/run_part_b.py --method gnn && python main.py --stage analysis --source teammate_export
+
+
+--------------------------------------------------------------------------------
+MODEL / HEALING TOGGLES  (config.py, or per-run flags)
+--------------------------------------------------------------------------------
+
+  config.py:
+      MODEL_CHOICE   = "baseline"   # "baseline" (Part A)  | "attention" (Part C)
+      HEALING_METHOD = "classical"  # "classical" (Part B) | "gnn" (Part D)
+      EPOCHS = 10                  # Part A epochs
+      EPOCHS_ATTENTION = 10        # Part C epochs
+      MAX_TRAIN_SAMPLES = 200       # 256x256 patches used
+      OCCLOSS_MULT = 5.0            # occlusion-weighted pixels count 6x in Part C
+      GNN_EPOCHS = 60               # Part D GNN epochs
+
+  Per-run flags (no need to edit config.py):
+      python main.py --stage extraction --model attention
+      python main.py --stage graph --healing gnn
+      python main.py --stage extraction --epochs 15 --samples 500
+      python main.py --stage extraction --use-synthetic --epochs 2 --samples 24
+
+
+--------------------------------------------------------------------------------
+WHAT GETS WRITTEN  (outputs/)
+--------------------------------------------------------------------------------
+
+  outputs/best_model.pth                  Part A baseline weights
+  outputs/best_attention_model.pth        Part C attention weights
+  outputs/gnn_link_predictor.pt           Part D GNN link predictor
+  outputs/masks/mask_tile_XXX.png         inferred masks (0 = bg, 255 = road)
+  outputs/tiles_manifest.json             tile_id, source image, size, mask path
+  outputs/segmentation_metrics.json       Part A: IoU / Dice / Occlusion-Recall
+  outputs/segmentation_metrics_attention.json  Part C: same three metrics
+  outputs/partC_comparison.json + plots/partC_comparison.png
+  outputs/partD_comparison.json + plots/partD_comparison.png
+  outputs/graph.graphml, nodes.json, edges.json   shared graph contract
+  outputs/results.json                    centrality + node-failure ablation
+  outputs/plots/training_curve.png, predictions.png, centrality_top10.png
+
+  Downstream (teammate's analysis half) reads ONLY:
+      graph.graphml + nodes.json + edges.json  (integer node IDs, weights in pixels)
+
